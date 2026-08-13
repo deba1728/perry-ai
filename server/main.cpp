@@ -552,17 +552,17 @@ std::vector<std::string> chunkText(const std::string& text,
 }
 
 // =====================================================================
-//  OLLAMA CLIENT  — wraps local Ollama REST API
-//  Install:  https://ollama.com
-//  Models:   ollama pull nomic-embed-text
-//            ollama pull llama3.2
+//  NVIDIA NIM CLIENT — NVIDIA AI Foundation Models
+//  API key: export NVIDIA_API_KEY=nvapi-...
+//  Models:  nvidia/nv-embed-v1  (embeddings)
+//           meta/llama-3.1-8b-instruct  (generation)
+//  Docs:    https://build.nvidia.com
 // =====================================================================
 
-class OllamaClient {
-    std::string host;
-    int         port;
+class NvidiaClient {
+    std::string apiKey;
+    std::string host = "integrate.api.nvidia.com";
 
-    // Escape a string for embedding inside a JSON string literal
     std::string esc(const std::string& s) {
         std::string o;
         for (char c : s) {
@@ -576,13 +576,12 @@ class OllamaClient {
         return o;
     }
 
-    // Parse {"embedding":[...]} from Ollama /api/embeddings response
+    // Parse {"data":[{"embedding":[...]}]} — OpenAI-compatible format
     std::vector<float> parseEmbedding(const std::string& body) {
         size_t p = body.find("\"embedding\"");
         if (p == std::string::npos) return {};
         p = body.find('[', p);
         if (p == std::string::npos) return {};
-        // Find matching ]  — embeddings can be large (768+ floats)
         size_t e = p + 1, depth = 1;
         while (e < body.size() && depth > 0) {
             if (body[e] == '[') depth++;
@@ -592,48 +591,94 @@ class OllamaClient {
         return parseVec(body.substr(p + 1, e - p - 2));
     }
 
-    // Parse {"response":"..."} from Ollama /api/generate response
-    std::string parseResponse(const std::string& body) {
-        return extractStr(body, "response");
+    // Parse {"choices":[{"message":{"content":"..."}}]} — OpenAI chat format
+    std::string parseCompletion(const std::string& body) {
+        size_t p = body.find("\"content\"");
+        if (p == std::string::npos) return "";
+        p = body.find(':', p) + 1;
+        while (p < body.size() && (body[p] == ' ' || body[p] == '\t')) p++;
+        if (p >= body.size() || body[p] != '"') return "";
+        p++;
+        std::string result;
+        while (p < body.size()) {
+            if (body[p] == '"') break;
+            if (body[p] == '\\' && p + 1 < body.size()) {
+                p++;
+                switch (body[p]) {
+                    case '"':  result += '"';  break;
+                    case '\\': result += '\\'; break;
+                    case 'n':  result += '\n'; break;
+                    case 'r':  result += '\r'; break;
+                    case 't':  result += '\t'; break;
+                    default:   result += body[p]; break;
+                }
+            } else { result += body[p]; }
+            p++;
+        }
+        return result;
+    }
+
+    httplib::Headers authHeaders() {
+        return {
+            {"Authorization", "Bearer " + apiKey},
+            {"Content-Type",  "application/json"}
+        };
     }
 
 public:
-    std::string embedModel = "nomic-embed-text";
-    std::string genModel   = "llama3.2";
+    std::string embedModel = "nvidia/nv-embed-v1";
+    std::string genModel   = "meta/llama-3.1-8b-instruct";
 
-    OllamaClient(const std::string& h = "127.0.0.1", int p = 11434)
-        : host(h), port(p) {}
-
-    bool isAvailable() {
-        httplib::Client cli(host, port);
-        cli.set_connection_timeout(2, 0);
-        auto res = cli.Get("/api/tags");
-        return res && res->status == 200;
+    NvidiaClient() {
+        // 1. Try environment variable first
+        const char* envKey = std::getenv("NVIDIA_API_KEY");
+        if (envKey && std::string(envKey).size() > 4) { apiKey = envKey; return; }
+        // 2. Fall back to .env file in CWD
+        std::ifstream dotenv(".env");
+        std::string line;
+        while (std::getline(dotenv, line)) {
+            if (line.rfind("NVIDIA_API_KEY=", 0) == 0) {
+                apiKey = line.substr(15);
+                // trim trailing whitespace/CR
+                while (!apiKey.empty() && (apiKey.back() == ' ' || apiKey.back() == '\r' || apiKey.back() == '\n'))
+                    apiKey.pop_back();
+                return;
+            }
+        }
     }
 
-    // Returns empty vector if Ollama is not running or model not found
+    bool isAvailable() { return !apiKey.empty(); }
+
     std::vector<float> embed(const std::string& text) {
-        httplib::Client cli(host, port);
-        cli.set_connection_timeout(3, 0);
+        if (apiKey.empty()) return {};
+        httplib::SSLClient cli(host);
+        cli.set_connection_timeout(5, 0);
         cli.set_read_timeout(30, 0);
-        std::string body = "{\"model\":\"" + embedModel + "\",\"prompt\":\"" + esc(text) + "\"}";
-        auto res = cli.Post("/api/embeddings", body, "application/json");
+        cli.enable_server_certificate_verification(false);
+        std::string body =
+            "{\"model\":\"" + embedModel + "\","
+            "\"input\":[\"" + esc(text) + "\"],"
+            "\"encoding_format\":\"float\"}";
+        auto res = cli.Post("/v1/embeddings", authHeaders(), body, "application/json");
         if (!res || res->status != 200) return {};
         return parseEmbedding(res->body);
     }
 
-    // Returns error string if Ollama is unavailable
     std::string generate(const std::string& prompt) {
-        httplib::Client cli(host, port);
-        cli.set_connection_timeout(3, 0);
-        cli.set_read_timeout(180, 0);   // LLMs can be slow
-        std::string body = "{\"model\":\"" + genModel + "\","
-                           "\"prompt\":\"" + esc(prompt) + "\","
-                           "\"stream\":false}";
-        auto res = cli.Post("/api/generate", body, "application/json");
+        if (apiKey.empty()) return "ERROR: Set NVIDIA_API_KEY environment variable.";
+        httplib::SSLClient cli(host);
+        cli.set_connection_timeout(5, 0);
+        cli.set_read_timeout(120, 0);
+        cli.enable_server_certificate_verification(false);
+        std::string body =
+            "{\"model\":\"" + genModel + "\","
+            "\"messages\":[{\"role\":\"user\",\"content\":\"" + esc(prompt) + "\"}],"
+            "\"max_tokens\":1024,"
+            "\"stream\":false}";
+        auto res = cli.Post("/v1/chat/completions", authHeaders(), body, "application/json");
         if (!res || res->status != 200)
-            return "ERROR: Ollama unavailable. Run: ollama serve";
-        return parseResponse(res->body);
+            return "ERROR: NVIDIA API call failed (status " + (res ? std::to_string(res->status) : "0") + ")";
+        return parseCompletion(res->body);
     }
 };
 
@@ -766,18 +811,16 @@ void loadDemo(VectorDB& db) {
 int main() {
     VectorDB   db(DIMS);
     DocumentDB docDB;
-    OllamaClient ollama;
+    NvidiaClient nvidia;
 
     loadDemo(db);
 
-    // Check Ollama at startup (non-fatal)
-    bool ollamaUp = ollama.isAvailable();
-    std::cout << "=== VectorDB Engine ===" << std::endl;
+    bool nvidiaUp = nvidia.isAvailable();
+    std::cout << "=== VectorDB Engine (NVIDIA NIM) ===" << std::endl;
     std::cout << "http://localhost:8080" << std::endl;
     std::cout << db.size() << " demo vectors | " << DIMS << " dims | HNSW+KD-Tree+BruteForce" << std::endl;
-    std::cout << "Ollama: " << (ollamaUp ? "ONLINE" : "OFFLINE (install from ollama.com)") << std::endl;
-    if (ollamaUp) std::cout << "  embed model: " << ollama.embedModel
-                            << "  gen model: "   << ollama.genModel << std::endl;
+    std::cout << "NVIDIA NIM: " << (nvidiaUp ? "READY (API key set)" : "NO KEY — set NVIDIA_API_KEY") << std::endl;
+    if (nvidiaUp) std::cout << "  embed: " << nvidia.embedModel << "  gen: " << nvidia.genModel << std::endl;
 
     httplib::Server svr;
 
@@ -914,12 +957,11 @@ int main() {
         std::vector<int> ids;
 
         for (int i = 0; i < (int)chunks.size(); i++) {
-            auto emb = ollama.embed(chunks[i]);
+            auto emb = nvidia.embed(chunks[i]);
             if (emb.empty()) {
                 res.set_content(
-                    "{\"error\":\"Ollama unavailable. "
-                    "Install from https://ollama.com then run: "
-                    "ollama pull nomic-embed-text && ollama pull llama3.2\"}",
+                    "{\"error\":\"NVIDIA API unavailable. "
+                    "Set environment variable NVIDIA_API_KEY (get key at build.nvidia.com)\"}",
                     "application/json");
                 return;
             }
@@ -976,9 +1018,9 @@ int main() {
             res.set_content("{\"error\":\"need question\"}", "application/json"); return;
         }
 
-        auto qEmb = ollama.embed(question);
+        auto qEmb = nvidia.embed(question);
         if (qEmb.empty()) {
-            res.set_content("{\"error\":\"Ollama unavailable\"}", "application/json"); return;
+            res.set_content("{\"error\":\"NVIDIA API unavailable — set NVIDIA_API_KEY\"}", "application/json"); return;
         }
 
         auto hits = docDB.search(qEmb, k);
@@ -1006,9 +1048,9 @@ int main() {
         }
 
         // Step 1: embed the question
-        auto qEmb = ollama.embed(question);
+        auto qEmb = nvidia.embed(question);
         if (qEmb.empty()) {
-            res.set_content("{\"error\":\"Ollama unavailable\"}", "application/json"); return;
+            res.set_content("{\"error\":\"NVIDIA API unavailable — set NVIDIA_API_KEY\"}", "application/json"); return;
         }
 
         // Step 2: retrieve top-k relevant chunks
@@ -1031,12 +1073,12 @@ int main() {
             "Answer:";
 
         // Step 4: generate answer
-        auto answer = ollama.generate(prompt);
+        auto answer = nvidia.generate(prompt);
 
         // Step 5: return everything
         std::ostringstream ss;
         ss << "{\"answer\":" << jS(answer)
-           << ",\"model\":"  << jS(ollama.genModel)
+           << ",\"model\":"  << jS(nvidia.genModel)
            << ",\"contexts\":[";
         for (size_t i = 0; i < hits.size(); i++) {
             if (i) ss << ',';
@@ -1052,11 +1094,11 @@ int main() {
     // GET /status
     svr.Get("/status", [&](const httplib::Request&, httplib::Response& res) {
         cors(res);
-        bool up = ollama.isAvailable();
+        bool up = nvidia.isAvailable();
         std::ostringstream ss;
-        ss << "{\"ollamaAvailable\":"  << (up ? "true" : "false")
-           << ",\"embedModel\":"       << jS(ollama.embedModel)
-           << ",\"genModel\":"         << jS(ollama.genModel)
+        ss << "{\"nvidiaAvailable\":"  << (up ? "true" : "false")
+           << ",\"embedModel\":"       << jS(nvidia.embedModel)
+           << ",\"genModel\":"         << jS(nvidia.genModel)
            << ",\"docCount\":"         << docDB.size()
            << ",\"docDims\":"          << docDB.getDims()
            << ",\"demoDims\":"         << DIMS
@@ -1074,15 +1116,19 @@ int main() {
         res.set_content(ss.str(), "application/json");
     });
 
-    // Serve index.html
-    svr.Get("/", [](const httplib::Request&, httplib::Response& res) {
-        std::ifstream f("index.html");
-        if (!f.is_open()) { res.status = 404; return; }
-        res.set_content(
-            std::string(std::istreambuf_iterator<char>(f),
-                        std::istreambuf_iterator<char>()),
-            "text/html");
-    });
+    // Serve static files from frontend/dist if built, otherwise fall back to root index.html
+    if (std::ifstream("frontend/dist/index.html").good()) {
+        svr.set_mount_point("/", "./frontend/dist");
+    } else {
+        svr.Get("/", [](const httplib::Request&, httplib::Response& res) {
+            std::ifstream f("index.html");
+            if (!f.is_open()) { res.status = 404; return; }
+            res.set_content(
+                std::string(std::istreambuf_iterator<char>(f),
+                            std::istreambuf_iterator<char>()),
+                "text/html");
+        });
+    }
 
     svr.listen("0.0.0.0", 8080);
     return 0;

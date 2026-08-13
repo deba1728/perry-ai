@@ -1,7 +1,6 @@
 # VectorDB — Build a Vector Database from Scratch in C++
 
-A fully working **Vector Database** built from scratch in C++ with a web UI.  
-Implements **HNSW**, **KD-Tree**, and **Brute Force** search algorithms side-by-side, plus a **RAG pipeline** powered by a local LLM via Ollama.
+A fully working **Vector Database** built from scratch in C++ with a web UI.Implements **HNSW**, **KD-Tree**, and **Brute Force** search algorithms side-by-side, plus a **RAG pipeline** powered by a local LLM via Ollama.
 
 > Built as an educational project to show how production vector databases like Pinecone, Weaviate, and Chroma actually work under the hood.
 
@@ -9,15 +8,15 @@ Implements **HNSW**, **KD-Tree**, and **Brute Force** search algorithms side-by-
 
 ## What This Project Does
 
-| Feature | Description |
-|---|---|
-| **3 Search Algorithms** | HNSW (production-grade), KD-Tree, Brute Force — run all three and compare speed |
-| **3 Distance Metrics** | Cosine similarity, Euclidean distance, Manhattan distance |
-| **16D Demo Vectors** | 20 pre-loaded semantic vectors across 4 categories (CS, Math, Food, Sports) |
-| **2D PCA Scatter Plot** | Live visualization of semantic space — watch clusters form |
-| **Real Document Embedding** | Paste any text → Ollama embeds it with `nomic-embed-text` (768D) |
-| **RAG Pipeline** | Ask questions about your documents → HNSW retrieves context → local LLM answers |
-| **Full REST API** | CRUD endpoints: insert, delete, search, benchmark, hnsw-info |
+| Feature                           | Description                                                                       |
+| --------------------------------- | --------------------------------------------------------------------------------- |
+| **3 Search Algorithms**     | HNSW (production-grade), KD-Tree, Brute Force — run all three and compare speed  |
+| **3 Distance Metrics**      | Cosine similarity, Euclidean distance, Manhattan distance                         |
+| **16D Demo Vectors**        | 20 pre-loaded semantic vectors across 4 categories (CS, Math, Food, Sports)       |
+| **2D PCA Scatter Plot**     | Live visualization of semantic space — watch clusters form                       |
+| **Real Document Embedding** | Paste any text → Ollama embeds it with`nomic-embed-text` (768D)                |
+| **RAG Pipeline**            | Ask questions about your documents → HNSW retrieves context → local LLM answers |
+| **Full REST API**           | CRUD endpoints: insert, delete, search, benchmark, hnsw-info                      |
 
 ---
 
@@ -68,6 +67,7 @@ You need **3 things** installed on your Windows laptop:
 ```bash
 pacman -Syu
 ```
+
 *(Close and reopen the terminal if it asks you to)*
 
 ```bash
@@ -81,9 +81,11 @@ pacman -S mingw-w64-ucrt-x86_64-gcc
    - Click **New** and add: `C:\msys64\ucrt64\bin`
    - Click OK on all windows
    - **Open a new PowerShell** and verify:
+
    ```
    g++ --version
    ```
+
    You should see something like `g++ (GCC) 15.x.x`
 
 ---
@@ -93,6 +95,7 @@ pacman -S mingw-w64-ucrt-x86_64-gcc
 1. Go to **https://git-scm.com/download/win** and download Git for Windows
 2. Run the installer with default settings
 3. Verify in PowerShell:
+
 ```
 git --version
 ```
@@ -109,17 +112,21 @@ git --version
 ```powershell
 ollama pull nomic-embed-text
 ```
+
 *(~274 MB — this is the embedding model)*
 
 ```powershell
 ollama pull llama3.2
 ```
+
 *(~2 GB — this is the language model)*
 
 5. Verify Ollama is running:
+
 ```powershell
 ollama list
 ```
+
 You should see both models listed.
 
 > **Minimum specs for Ollama:** 8GB RAM recommended. The models will use ~3GB total.
@@ -150,6 +157,7 @@ g++ -std=c++17 -O2 main.cpp -o db -lws2_32
 This produces `db.exe`. It takes about 10–20 seconds.
 
 > **Troubleshooting:**
+>
 > - `g++: command not found` → MSYS2 not in PATH, redo Step 1 point 5
 > - `undefined reference to WSA...` → missing `-lws2_32` flag, add it
 > - Takes too long? Remove `-O2` for faster (but slower executable) compile
@@ -159,17 +167,21 @@ This produces `db.exe`. It takes about 10–20 seconds.
 ### Step 6 — Run Everything
 
 **Terminal 1** — Start Ollama (if not already running):
+
 ```powershell
 ollama serve
 ```
+
 *(If Ollama is already in the system tray, skip this)*
 
 **Terminal 2** — Start the VectorDB server:
+
 ```powershell
 ./db
 ```
 
 You should see:
+
 ```
 === VectorDB Engine ===
 http://localhost:8080
@@ -179,6 +191,7 @@ Ollama: ONLINE
 ```
 
 **Open your browser** and go to:
+
 ```
 http://localhost:8080
 ```
@@ -214,6 +227,7 @@ This uses Ollama to generate **real 768-dimensional embeddings** from any text.
 3. Click **🤖 ASK AI**
 
 What happens behind the scenes:
+
 ```
 1. Your question → embedded with nomic-embed-text (768D vector)
 2. HNSW search → finds 3 most semantically similar chunks
@@ -231,25 +245,25 @@ The server exposes a full REST API at `http://localhost:8080`.
 
 ### Demo Vector Endpoints
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/search?v=f1,f2,...&k=5&metric=cosine&algo=hnsw` | K-NN search |
-| `POST` | `/insert` | Insert a demo vector |
-| `DELETE` | `/delete/:id` | Delete by ID |
-| `GET` | `/items` | List all demo vectors |
-| `GET` | `/benchmark?v=...&k=5&metric=cosine` | Compare all 3 algorithms |
-| `GET` | `/hnsw-info` | HNSW graph structure and layer stats |
-| `GET` | `/stats` | Database statistics |
+| Method     | Endpoint                                            | Description                          |
+| ---------- | --------------------------------------------------- | ------------------------------------ |
+| `GET`    | `/search?v=f1,f2,...&k=5&metric=cosine&algo=hnsw` | K-NN search                          |
+| `POST`   | `/insert`                                         | Insert a demo vector                 |
+| `DELETE` | `/delete/:id`                                     | Delete by ID                         |
+| `GET`    | `/items`                                          | List all demo vectors                |
+| `GET`    | `/benchmark?v=...&k=5&metric=cosine`              | Compare all 3 algorithms             |
+| `GET`    | `/hnsw-info`                                      | HNSW graph structure and layer stats |
+| `GET`    | `/stats`                                          | Database statistics                  |
 
 ### Document & RAG Endpoints
 
-| Method | Endpoint | Body | Description |
-|---|---|---|---|
-| `POST` | `/doc/insert` | `{"title":"...","text":"..."}` | Embed and store document |
-| `GET` | `/doc/list` | — | List all stored documents |
-| `DELETE` | `/doc/delete/:id` | — | Delete document chunk |
-| `POST` | `/doc/ask` | `{"question":"...","k":3}` | RAG: retrieve + generate |
-| `GET` | `/status` | — | Ollama status and model info |
+| Method     | Endpoint            | Body                             | Description                  |
+| ---------- | ------------------- | -------------------------------- | ---------------------------- |
+| `POST`   | `/doc/insert`     | `{"title":"...","text":"..."}` | Embed and store document     |
+| `GET`    | `/doc/list`       | —                               | List all stored documents    |
+| `DELETE` | `/doc/delete/:id` | —                               | Delete document chunk        |
+| `POST`   | `/doc/ask`        | `{"question":"...","k":3}`     | RAG: retrieve + generate     |
+| `GET`    | `/status`         | —                               | Ollama status and model info |
 
 ### Example: Search via curl
 
@@ -317,13 +331,13 @@ KD-Tree pruning relies on axis-aligned distance bounds. In high dimensions, almo
 
 ## Common Issues
 
-| Problem | Fix |
-|---|---|
-| `Ollama: OFFLINE` in header | Run `ollama serve` in a terminal |
-| Embedding takes forever | Ollama is downloading the model on first use, wait 2 min |
-| `g++: command not found` | Add `C:\msys64\ucrt64\bin` to Windows PATH |
-| Port 8080 already in use | Kill the process: `netstat -ano \| findstr 8080` then `taskkill /PID <pid> /F` |
-| LLM answer is slow | Normal — llama3.2 takes 10–30s on a laptop CPU. Use llama3.2:1b for faster answers |
+| Problem                       | Fix                                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------------ |
+| `Ollama: OFFLINE` in header | Run`ollama serve` in a terminal                                                    |
+| Embedding takes forever       | Ollama is downloading the model on first use, wait 2 min                             |
+| `g++: command not found`    | Add`C:\msys64\ucrt64\bin` to Windows PATH                                          |
+| Port 8080 already in use      | Kill the process:`netstat -ano \| findstr 8080` then `taskkill /PID <pid> /F`     |
+| LLM answer is slow            | Normal — llama3.2 takes 10–30s on a laptop CPU. Use llama3.2:1b for faster answers |
 
 ### Use a Smaller/Faster LLM
 
@@ -334,9 +348,11 @@ ollama pull llama3.2:1b
 ```
 
 Then edit [main.cpp](main.cpp) line where `genModel` is set:
+
 ```cpp
 std::string genModel = "llama3.2:1b";   // change this
 ```
+
 Recompile and restart.
 
 ---

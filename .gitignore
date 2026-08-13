@@ -1,4 +1,7 @@
-# Compiled binaries
+# Compiled server binary
+db
+
+# Old Windows build artifacts
 *.exe
 *.o
 *.out
@@ -8,11 +11,16 @@ a.out
 build/
 bin/
 
-# IDE files
+# Secrets — never commit
+.env
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# IDE / OS
 .vscode/
 .idea/
 *.user
-
-# OS files
 .DS_Store
 Thumbs.db

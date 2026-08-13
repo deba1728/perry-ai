@@ -1,0 +1,22 @@
+# Tasks — React Frontend for VectorDB
+
+- [x] Initialize frontend subdirectory with Vite + React
+  - [x] Run help for create-vite first
+  - [x] Initialize project with React template
+  - [x] Install dependencies (react, react-dom, zustand, framer-motion, lucide-react)
+- [x] Create layout and CSS design system (based on DESIGN.md)
+  - [x] Set up index.css with CSS variables, fonts, reset, and gradient-mesh classes
+  - [x] Create main layout (App.jsx) with sidebar and content area
+- [x] Implement state management
+  - [x] Create store.js with Zustand for data storage and API operations
+- [x] Implement ScatterPlot canvas visualizer component
+  - [x] Add canvas rendering logic for PCA projection, hits, query nodes, and labels
+  - [x] Integrate hover tooltips and pulse animations
+- [x] Create main tabs
+  - [x] Implement SearchTab.jsx (query input, nearest results, algorithm comparison, HNSW layers)
+  - [x] Implement DocsTab.jsx (document embedding upload and document list)
+  - [x] Implement RagTab.jsx (question history, streaming-like chat bubbles, and context reference chips)
+- [x] Verification and Polish
+  - [x] Test frontend integration with the C++ backend
+  - [x] Build production assets using npm run build
+  - [x] Document final walkthrough
